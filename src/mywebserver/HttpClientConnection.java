@@ -186,8 +186,7 @@ public class HttpClientConnection implements Runnable {
                     HttpWriter hw = new HttpWriter(this.os);
                     hw.writeString("HTTP/1.1 200 OK");
                     hw.writeString("Content-Type: text/css");
-                    // this.writeString("Content-Length: " + file.length());
-                    hw.writeString("Content-Length: " + file.length());
+                    // hw.writeString("Content-Length: " + file.length());
                     hw.writeString("\r\n");
 
                     // SEND FILE ITSELF
@@ -223,14 +222,16 @@ public class HttpClientConnection implements Runnable {
                     HttpWriter hw = new HttpWriter(this.os);
                     hw.writeString("HTTP/1.1 200 OK");
                     hw.writeString("Content-Type: image/png");
-                    hw.writeString("Content-Length: " + file.length());
+                    // hw.writeString("Content-Length: " + file.length());
                     hw.writeString("\r\n");
 
                     // READ IMG FILE
                     // byte[] data = Files.readAllBytes(Paths.get(file.getPath()));
-                    byte[] data = fis.readAllBytes();
                     // SEND FILE ITSELF
-                    hw.writeBytes(data);// NEED TO SEND IN ONE SHOT
+                    byte[] data;
+                    while ((data = Files.readAllBytes(path)) != null) {
+                        hw.writeBytes(data);// NEED TO SEND IN ONE SHOT
+                    }
                     hw.flush();
                     hw.close();
                     System.out.println(Thread.currentThread().getName() + "> Finished sending file of " + file.length()
