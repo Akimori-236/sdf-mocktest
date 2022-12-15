@@ -3,6 +3,7 @@ package mywebserver;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -10,6 +11,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.Socket;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -21,20 +23,20 @@ public class HttpClientConnection implements Runnable {
     BufferedReader br;
     BufferedWriter bw;
     OutputStream os;
-    HttpWriter hw;
+    String threadname;
 
     public HttpClientConnection(Socket socket, List<String> docRoot) {
         this.socket = socket;
         this.docRoot = docRoot;
+        this.threadname = Thread.currentThread().getName();
 
         try {
             InputStream is = this.socket.getInputStream();
             InputStreamReader isr = new InputStreamReader(is);
-            br = new BufferedReader(isr);
-            os = this.socket.getOutputStream();
+            this.br = new BufferedReader(isr);
+            this.os = this.socket.getOutputStream();
             OutputStreamWriter osw = new OutputStreamWriter(this.os);
-            bw = new BufferedWriter(osw);
-            hw = new HttpWriter(this.os);
+            this.bw = new BufferedWriter(osw);
 
         } catch (IOException e) {
             // e.printStackTrace();
@@ -44,25 +46,20 @@ public class HttpClientConnection implements Runnable {
 
     @Override
     public void run() {
-        System.out.println("Thread running...");
-
-        String request;
-        String method;
-        String resource;
+        System.out.println(this.threadname + "> Thread running...");
 
         // READ REQUEST
         try {
-            request = this.br.readLine();
-            System.out.println("Request header> " + request);
+            String request = this.br.readLine();
+            System.out.println(this.threadname + "> Request header> " + request);
             String[] requestTerms = request.split(" ");
-            method = requestTerms[0];
-            if (requestTerms[1] == "/") {
+            String method = requestTerms[0];
+            String resource;
+            if (requestTerms[1].trim().equals("/")) {
                 resource = "/index.html";
             } else {
                 resource = requestTerms[1];
             }
-            // System.out.println("Request method> " + method);
-
             // INVALID METHOD
             if (!validMethod(method)) {
                 this.socket.close();
@@ -74,19 +71,30 @@ public class HttpClientConnection implements Runnable {
                 return;
             } else {
                 // FILE FOUND
-                System.out.println("Resource found");
+                HttpWriter hw = new HttpWriter(this.os);
+                System.out.println(this.threadname + "> Resource found (" + resource + ")");
                 if (resource.endsWith(".html")) {
-                    hw.sendHTML(resource, docRoot);
+                    System.out.println(this.threadname + "> Sending html file...");
+                    this.sendHTML(resource, docRoot);
+                } else if (resource.endsWith(".css")) {
+                    System.out.println(this.threadname + "> Sending css file...");
+                    this.sendCSS(resource, docRoot);
                 } else if (resource.endsWith(".png")) {
-                    hw.sendPNG(resource, docRoot);
+                    System.out.println(this.threadname + "> Sending png file...");
+                    this.sendPNG(resource, docRoot);
                 }
-
+                try {
+                    hw.flush();
+                    hw.close();
+                } catch (Exception e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
             }
 
         } catch (IOException e) {
-            System.err.println("ERROR> Unable to read request");
+            System.err.println(this.threadname + "> ERROR> Unable to read request");
         }
-
     }
 
     private Boolean validMethod(String method) {
@@ -94,9 +102,12 @@ public class HttpClientConnection implements Runnable {
         if (!valid) {
             System.err.println("ERROR 405");
             try {
+                HttpWriter hw = new HttpWriter(this.os);
                 hw.writeString("HTTP/1.1 405 Method Not Allowed\r\n\r\n" + method + " not supported\r\n");
+                hw.flush();
+                hw.close();
             } catch (Exception e) {
-                System.err.println("ERROR> Unable to write error 405 to client");
+                System.err.println(this.threadname + "> ERROR> Unable to write error 405 to client");
             }
         }
         return valid;
@@ -106,20 +117,128 @@ public class HttpClientConnection implements Runnable {
         Boolean found = false;
         for (String dir : docRoot) {
             Path path = Paths.get(dir, resource);
-            File f = path.toFile();
-            if (f.exists()) {
+            File file = path.toFile();
+            if (file.exists()) {
                 found = true;
             }
         }
         if (!found) {
             System.err.println("ERROR 404");
             try {
+                HttpWriter hw = new HttpWriter(this.os);
                 hw.writeString("HTTP/1.1 404 Not Found\r\n\r\n" + resource + " not found\r\n");
+                hw.flush();
+                hw.close();
             } catch (Exception e) {
-                System.err.println("ERROR> Unable to write error 404 to client");
+                System.err.println(this.threadname + "> ERROR> Unable to write error 404 to client");
             }
         }
         return found;
     }
 
+    public void sendHTML(String resource, List<String> docRoot) {
+        for (String dir : docRoot) {
+            Path path = Paths.get(dir, resource);
+            File file = path.toFile();
+            if (file.exists()) {
+                // SENDING
+                System.out.println(Thread.currentThread().getName() + "> File exists, sending file...");
+                try {
+                    FileReader fr = new FileReader(file);
+                    BufferedReader reader = new BufferedReader(fr);
+                    // SEND HTTP HEADER
+                    HttpWriter hw = new HttpWriter(this.os);
+                    hw.writeString("HTTP/1.1 200 OK");
+                    hw.writeString("Content-Type: text/html");
+                    hw.writeString("Content-Length: " + file.length());
+                    hw.writeString("\r\n");
+
+                    // SEND FILE ITSELF
+                    String line = reader.readLine();
+                    while (line != null) {
+                        hw.writeString(line);
+                        line = reader.readLine();
+                    }
+                    hw.flush();
+                    System.out.println(Thread.currentThread().getName() + "> Finished sending file of " + file.length()
+                            + " bytes");
+                    fr.close();
+                    hw.flush();
+                    hw.close();
+                } catch (Exception e) {
+                }
+            } // end if
+            break;
+        } // end for
+    }
+
+    public void sendCSS(String resource, List<String> docRoot) {
+        for (String dir : docRoot) {
+            Path path = Paths.get(dir, resource);
+            File file = path.toFile();
+            if (file.exists()) {
+                // SENDING
+                System.out.println(Thread.currentThread().getName() + "> File exists, sending file...");
+                try {
+                    FileReader fr = new FileReader(file);
+                    BufferedReader reader = new BufferedReader(fr);
+                    // SEND HTTP HEADER
+                    HttpWriter hw = new HttpWriter(this.os);
+                    hw.writeString("HTTP/1.1 200 OK");
+                    hw.writeString("Content-Type: text/css");
+                    // this.writeString("Content-Length: " + file.length());
+                    hw.writeString("Content-Length: " + file.length());
+                    hw.writeString("\r\n");
+
+                    // SEND FILE ITSELF
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        System.out.println("CSS> " + line);
+                        hw.writeString(line);
+                    }
+                    fr.close();
+                    hw.flush();
+                    hw.close();
+                    System.out.println(Thread.currentThread().getName() + "> Finished sending file of " + file.length()
+                            + " bytes");
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } // end if
+            break;
+        } // end for
+    }
+
+    public void sendPNG(String resource, List<String> docRoot) {
+        for (String dir : docRoot) {
+            Path path = Paths.get(dir, resource);
+            File file = path.toFile();
+            if (file.exists()) {
+                // SENDING
+                System.out.println(Thread.currentThread().getName() + "> File exists, sending file...");
+                try {
+                    // SEND HTTP HEADER
+                    FileInputStream fis = new FileInputStream(dir + resource);
+                    HttpWriter hw = new HttpWriter(this.os);
+                    hw.writeString("HTTP/1.1 200 OK");
+                    hw.writeString("Content-Type: image/png");
+                    hw.writeString("Content-Length: " + file.length());
+                    hw.writeString("\r\n");
+
+                    // READ IMG FILE
+                    // byte[] data = Files.readAllBytes(Paths.get(file.getPath()));
+                    byte[] data = fis.readAllBytes();
+                    // SEND FILE ITSELF
+                    hw.writeBytes(data);// NEED TO SEND IN ONE SHOT
+                    hw.flush();
+                    hw.close();
+                    System.out.println(Thread.currentThread().getName() + "> Finished sending file of " + file.length()
+                            + " bytes");
+                } catch (Exception e) {
+                }
+            } // end if
+            break;
+        } // end for
+    }
 }
