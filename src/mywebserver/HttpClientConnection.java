@@ -75,7 +75,12 @@ public class HttpClientConnection implements Runnable {
             } else {
                 // FILE FOUND
                 System.out.println("Resource found");
-                sendHTML(resource);
+                if (resource.endsWith(".html")) {
+                    hw.sendHTML(resource, docRoot);
+                } else if (resource.endsWith(".png")) {
+                    hw.sendPNG(resource, docRoot);
+                }
+
             }
 
         } catch (IOException e) {
@@ -117,35 +122,4 @@ public class HttpClientConnection implements Runnable {
         return found;
     }
 
-    private void sendHTML(String resource) {
-        for (String dir : this.docRoot) {
-            Path path = Paths.get(dir, resource);
-            File f = path.toFile();
-            if (f.exists()) {
-                // SENDING
-                System.out.println("File exists, sending file...");
-                File htmlfile = new File(dir + resource);
-                try {
-                    BufferedReader reader = new BufferedReader(new FileReader(htmlfile));
-                    // SEND HTTP HEADER
-                    hw.writeString("HTTP/1.1 200 OK");
-                    hw.writeString("Content-Type: text/html");
-                    hw.writeString("Content-Length: " + htmlfile.length());
-                    hw.writeString("\r\n");
-
-                    // SEND FILE ITSELF
-                    String line = reader.readLine();
-                    while (line != null) {
-                        hw.writeString(line);
-                        line = reader.readLine();
-                    }
-                    hw.flush();
-                    System.out.println("Finished sending file of " + htmlfile.length() + " bytes");
-                    reader.close();
-                } catch (Exception e) {
-                }
-            }
-            break;
-        }
-    }
 }
