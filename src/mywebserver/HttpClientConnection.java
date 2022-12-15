@@ -2,7 +2,6 @@ package mywebserver;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -10,12 +9,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 
 public class HttpClientConnection implements Runnable {
 
@@ -53,7 +50,7 @@ public class HttpClientConnection implements Runnable {
         String method;
         String resource;
 
-        // read request
+        // READ REQUEST
         try {
             request = this.br.readLine();
             System.out.println("Request header> " + request);
@@ -64,18 +61,19 @@ public class HttpClientConnection implements Runnable {
             } else {
                 resource = requestTerms[1];
             }
-            System.out.println("Request method> " + method);
-            // if invalid method
+            // System.out.println("Request method> " + method);
+
+            // INVALID METHOD
             if (!validMethod(method)) {
                 this.socket.close();
                 return;
             }
-            // if file doesnt exist
+            // FILE DOESNT EXIST
             if (!resourceFound(resource)) {
                 this.socket.close();
                 return;
             } else {
-                // if resource found
+                // FILE FOUND
                 System.out.println("Resource found");
                 sendHTML(resource);
             }
@@ -115,9 +113,6 @@ public class HttpClientConnection implements Runnable {
             } catch (Exception e) {
                 System.err.println("ERROR> Unable to write error 404 to client");
             }
-            // this.bw.write("HTTP/1.1 404 Not Found\r\n\r\n" + resource + " not
-            // found\r\n");
-
         }
         return found;
     }
